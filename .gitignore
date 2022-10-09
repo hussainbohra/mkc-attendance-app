@@ -1,0 +1,9 @@
+.idea/
+resources/
+attendance/build/
+attendance/dist/
+attendance/src/mkc_attendance_app.egg-info/
+attendance/src/__pycache__/
+venv/
+attendance/src/attendance/__pycache__/
+bin/config.ini
