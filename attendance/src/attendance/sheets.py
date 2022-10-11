@@ -21,8 +21,12 @@ class GSheets:
         read the credentials
         :return:
         """
+        print(f"Building credentials using {self.credentials}")
         secret_file = os.path.join(self.credentials)
-        return service_account.Credentials.from_service_account_file(secret_file, scopes=self.scopes)
+        creds = service_account.Credentials.from_service_account_file(
+            secret_file, scopes=self.scopes
+        )
+        return creds
 
     def get_sheets(self, sheet_id):
         """
@@ -30,6 +34,7 @@ class GSheets:
         :param sheet_id:
         :return:
         """
+        print(f"Reading sheet={sheet_id}")
         if not self._auth:
             self._read_credentials()
         try:
