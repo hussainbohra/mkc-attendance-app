@@ -41,19 +41,21 @@ class Email:
         )
         return subject, message
 
-    def send_email(self, subject, message, recipients):
+    def send_email(self, subject, message, to_recipients, cc_recipients):
         """
         Send an email
 
-        :param subject:
-        :param message:
-        :param recipients:
+        :param subject: Email subject
+        :param message: Email message
+        :param to_recipients: Email to recipients
+        :param cc_recipients: Email cc recipients
         :return:
         """
         print(f"[Email]: Enter Send Email {subject}")
         draft = self.nylas_obj.drafts.create()
         draft.subject = subject
         draft.body = message
-        draft.to = list(map(lambda a: {'email': a}, recipients))
+        draft.to = list(map(lambda a: {'email': a}, to_recipients))
+        draft.cc = list(map(lambda a: {'email': a}, cc_recipients))
         print(f"[Email]: Ready to Send Email {subject}")
         draft.send()

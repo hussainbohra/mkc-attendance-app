@@ -55,7 +55,8 @@ class Report:
         )
         self.email_obj.send_email(
             subject, message,
-            self.config['email']['to_emails']
+            self.config['email']['to_emails'],
+            self.config['email']['cc_emails']
         )
 
     def build_school_db(self):
