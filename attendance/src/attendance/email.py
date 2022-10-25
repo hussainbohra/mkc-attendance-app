@@ -10,35 +10,57 @@ class Email:
 
     def prepare_email(
         self, latest_attendance,
-        subject, message, row
+        all_student_data, subject,
+        message, student_row, total_row
     ):
         """
         Build email subject and body
 
-        :param latest_attendance:
+        :param latest_attendance: Latest Attendance from all class
+        :param all_student_data: Complete Database of all students
+        :param subject:
+        :param message:
+        :param row:
         :return:
         """
         print("[Email]: Preparing Email")
         rows = []
+        counts = []
         for attendance in latest_attendance:
+            absent_count, present_count = 0, 0
             class_name = attendance.get("class_name")
             timestamp = attendance.get("last_attendance", {}).get("Timestamp")
             date = attendance.get("last_attendance", {}).get("Date:")
             if timestamp:
                 for k, v in attendance.get("last_attendance", {}).items():
-                    if k.strip().startswith('[') and k.strip().endswith(']') and str(v).lower() != "present":
-                        rows.append(
-                            row.format(
-                                date,
-                                k.strip().replace('[', '').replace(']', ''),
-                                class_name, v,
-                                "#FF0000" if str(v).lower() == "absent" else "#FFFF00"
-                            ))
+                    if k.strip().startswith('[') and k.strip().endswith(']'):
+                        if str(v).lower() != "present":
+                            absent_count += 1
+                            student_name = k.strip().replace('[', '').replace(']', '')
+                            student_info = list(
+                                filter(lambda a: a['full_name'].lower() == student_name.lower(), all_student_data))
+                            rows.append(
+                                student_row.format(
+                                    date,
+                                    student_name,
+                                    class_name, v,
+                                    student_info[0].get('mother_cell') if student_info else '',
+                                    student_info[0].get('father_cell') if student_info else '',
+                                    student_info[0].get('primary_email') if student_info else '',
+                                    "#FA5F55" if str(v).lower() == "absent" else "#FFFF00"
+                                ))
+                        else:
+                            present_count += 1
+            counts.append(total_row.format(
+                date, class_name, present_count, absent_count
+            ))
         subject = subject.format(datetime.now().strftime('%Y-%m-%d'))
         message = message.format(
             datetime.now().strftime('%Y-%m-%d'),
-            "\n".join(rows)
+            "\n".join(rows),
+            "\n".join(counts)
         )
+        message += "\n\n\n"
         return subject, message
 
     def send_email(self, subject, message, to_recipients, cc_recipients):

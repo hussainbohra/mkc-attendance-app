@@ -47,11 +47,14 @@ class Report:
                 'class_name': tab,
                 'last_attendance': last_attendance
             })
+        all_student_data = self.build_school_db()
         subject, message = self.email_obj.prepare_email(
             latest_attendance,
+            all_student_data,
             self.config['email']['subject'],
             self.config['email']['message'],
-            self.config['email']['row']
+            self.config['email']['student_row'],
+            self.config['email']['total_row']
         )
         self.email_obj.send_email(
             subject, message,
@@ -85,31 +88,28 @@ class Report:
             master_sheet,
             self.config['master_teacher_sheet_tab'],
         )
-        master_student_data = {}
+        all_student_data = []
         for val in master_student_values:
             try:
-                class_name = val['Class']
-                student_info = {
-                    "Ejamaat": val['Ejamaat'],
+                student_data = {
                     "full_name": val['Full Name'],
+                    "home_phone": val['HOME PHONE'],
+                    "father_cell": val['FATHER CELL'],
+                    "mother_cell": val['MOTHER CELL'],
+                    "primary_email": val['Primary Email'],
+                    "class_name": val['Class']
                 }
             except KeyError:
-                break
-            try:
-                master_student_data[class_name]["students"].append(student_info)
-            except KeyError:
-                master_student_data.update({
-                    class_name: {
-                        "students": [student_info],
-                        "teacher": {}
-                    }
+                continue
+            teacher = list(filter(lambda a: a['Class'] == val['Class'], teachers))
+            if teacher:
+                student_data.update({
+                    "teacher_Ejamaat": teacher[0]['Ejamaat'],
+                    "teacher_full_name": teacher[0]['Full Name']
                 })
-                teacher = list(filter(lambda a: a['Class'] == class_name, teachers))
-                if teacher:
-                    master_student_data[class_name]["teacher"].update({
-                        "Ejamaat": teacher[0]['Ejamaat'],
-                        "full_name": teacher[0]['Full Name']
-                    })
+            all_student_data.append(student_data)
+
+        return all_student_data
 
     def get_absentees(self, class_name, all_students, present_student):
         """
