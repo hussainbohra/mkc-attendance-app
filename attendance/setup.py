@@ -45,6 +45,7 @@ setuptools.setup(
         'nylas',
         'pandas',
         'structlog',
+        'xlsxwriter',
     ],
     test_requires=[],
     test_suite="tests",

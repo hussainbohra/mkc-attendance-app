@@ -2,12 +2,15 @@ from .config import Config
 from .sheets import GSheets
 from .email import Email
 
+from datetime import datetime
 import pandas as pd
+import xlsxwriter
 
 
 class Report:
     def __init__(self, config_file):
         """
+        Read all attendance data and prepare report
 
         :param credentials:
             a json file
@@ -48,16 +51,16 @@ class Report:
                 'last_attendance': last_attendance
             })
         all_student_data = self.build_school_db()
+
+        absentees, total = self.get_absentees(latest_attendance, all_student_data)
+        xlsx_file = self.generate_csv_report(absentees, total)
         subject, message = self.email_obj.prepare_email(
-            latest_attendance,
-            all_student_data,
-            self.config['email']['subject'],
-            self.config['email']['message'],
-            self.config['email']['student_row'],
-            self.config['email']['total_row']
+            absentees,
+            total,
+            self.config['email']
         )
         self.email_obj.send_email(
-            subject, message,
+            subject, message, xlsx_file,
             self.config['email']['to_emails'],
             self.config['email']['cc_emails']
         )
@@ -95,7 +98,9 @@ class Report:
                     "full_name": val['Full Name'],
                     "home_phone": val['HOME PHONE'],
                     "father_cell": val['FATHER CELL'],
+                    "father_name": val['FATHER'],
                     "mother_cell": val['MOTHER CELL'],
+                    "mother_name": val['MOTHER'],
                     "primary_email": val['Primary Email'],
                     "class_name": val['Class']
                 }
@@ -111,12 +116,96 @@ class Report:
 
         return all_student_data
 
-    def get_absentees(self, class_name, all_students, present_student):
+    def get_absentees(self, latest_attendance, all_student_data):
         """
+        Identifying all Absentees and generate there information
+        In addition, also creating a consolidated report
 
         :param class_name:
         :param all_students:
         :param present_student:
         :return:
         """
-        pass
+        print("[Get Absentees]: Identifying all Absentees")
+        absentees = []
+        total = []
+        print("Iterating over the latest attendance, to identify absentees")
+        for attendance in latest_attendance:
+            absent_count, present_count = 0, 0
+            class_name = attendance.get("class_name")
+            timestamp = attendance.get("last_attendance", {}).get("Timestamp")
+            date = attendance.get("last_attendance", {}).get("Date:")
+            if timestamp:
+                for k, v in attendance.get("last_attendance", {}).items():
+                    if k.strip().startswith('[') and k.strip().endswith(']'):
+                        if str(v).lower() != "present":
+                            absent_count += 1
+                            student_name = k.strip().replace('[', '').replace(']', '')
+                            student_info = list(
+                                filter(lambda a: a['full_name'].lower() == student_name.lower(), all_student_data))
+                            absentee = {
+                                "date": date,
+                                "student_name": student_name,
+                                "class_name": class_name,
+                                "status": v,
+                                "mother_info": "",
+                                "father_info": "",
+                                "primary_email": ""
+                            }
+                            if student_info:
+                                absentee.update({
+                                    "mother_info": f"{student_info[0].get('mother_name')} - {student_info[0].get('mother_cell')}",
+                                    "father_info": f"{student_info[0].get('father_name')} - {student_info[0].get('father_cell')}",
+                                    "primary_email": student_info[0].get('primary_email')
+                                })
+                            absentees.append(absentee)
+                        else:
+                            present_count += 1
+            total.append({
+                "date": date,
+                "class_name": class_name,
+                "present_count": present_count,
+                "absent_count": absent_count
+            })
+        print("[Get Absentees]: Exiting")
+        return absentees, total
+
+    def generate_csv_report(self, absentees, total):
+        """
+        Write an excel file
+            Tab1: All students absent on a given day
+            Tab2: Consolidated report
+        :param absentees:
+        :param total:
+        :return:
+        """
+        filename = "mkc-attendance-{0}.xlsx".format(datetime.now().strftime('%Y-%m-%d'))
+        workbook = xlsxwriter.Workbook(filename)
+        a_worksheet = workbook.add_worksheet("absentees")
+        row = 0
+        for absent in absentees:
+            col_num = 0
+            for key, val in absent.items():
+                a_worksheet.set_column(row, col_num, 20)
+                if row == 0:
+                    a_worksheet.write(row, col_num, key)
+                else:
+                    a_worksheet.write(row, col_num, val)
+                col_num += 1
+            row += 1
+
+        row = 0
+        t_worksheet = workbook.add_worksheet("total")
+        for t in total:
+            col_num = 0
+            for key, val in t.items():
+                t_worksheet.set_column(row, col_num, 20)
+                if row == 0:
+                    t_worksheet.write(row, col_num, key)
+                else:
+                    t_worksheet.write(row, col_num, val)
+                col_num += 1
+            row += 1
+
+        workbook.close()
+        return filename

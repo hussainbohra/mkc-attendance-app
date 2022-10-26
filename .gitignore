@@ -7,3 +7,5 @@ attendance/src/__pycache__/
 venv/
 attendance/src/attendance/__pycache__/
 bin/config.ini
+*.xlsx
+*.json

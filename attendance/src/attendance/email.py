@@ -9,75 +9,82 @@ class Email:
         )
 
     def prepare_email(
-        self, latest_attendance,
-        all_student_data, subject,
-        message, student_row, total_row
+        self,
+        absentees,
+        total,
+        config
     ):
         """
         Build email subject and body
 
-        :param latest_attendance: Latest Attendance from all class
-        :param all_student_data: Complete Database of all students
-        :param subject:
-        :param message:
-        :param row:
+        :param absentees:
+        :param total:
+        :param config:
         :return:
         """
         print("[Email]: Preparing Email")
-        rows = []
-        counts = []
-        for attendance in latest_attendance:
-            absent_count, present_count = 0, 0
-            class_name = attendance.get("class_name")
-            timestamp = attendance.get("last_attendance", {}).get("Timestamp")
-            date = attendance.get("last_attendance", {}).get("Date:")
-            if timestamp:
-                for k, v in attendance.get("last_attendance", {}).items():
-                    if k.strip().startswith('[') and k.strip().endswith(']'):
-                        if str(v).lower() != "present":
-                            absent_count += 1
-                            student_name = k.strip().replace('[', '').replace(']', '')
-                            student_info = list(
-                                filter(lambda a: a['full_name'].lower() == student_name.lower(), all_student_data))
-                            rows.append(
-                                student_row.format(
-                                    date,
-                                    student_name,
-                                    class_name, v,
-                                    student_info[0].get('mother_cell') if student_info else '',
-                                    student_info[0].get('father_cell') if student_info else '',
-                                    student_info[0].get('primary_email') if student_info else '',
-                                    "#FA5F55" if str(v).lower() == "absent" else "#FFFF00"
-                                ))
-                        else:
-                            present_count += 1
-            counts.append(total_row.format(
-                date, class_name, present_count, absent_count
-            ))
-        subject = subject.format(datetime.now().strftime('%Y-%m-%d'))
-        message = message.format(
+        absentees_data = ""
+        for absent in absentees:
+            absentees_data += config["student_row"].format(
+                absent["date"],
+                absent["student_name"],
+                absent["class_name"],
+                absent["status"],
+                absent["mother_info"],
+                absent["father_info"],
+                absent["primary_email"],
+                "#FA5F55" if str(absent["status"]).lower() == "absent" else "#FFFF00",
+            ) + "\n"
+        total_data = ""
+        for t in total:
+            total_data += config["total_row"].format(
+                t["date"],
+                t["class_name"],
+                t["present_count"],
+                t["absent_count"]
+            ) + "\n"
+        subject = config["subject"].format(datetime.now().strftime('%Y-%m-%d'))
+        message = config["message"].format(
             datetime.now().strftime('%Y-%m-%d'),
-            "\n".join(rows),
-            "\n".join(counts)
+            absentees_data,
+            total_data
         )
         message += "\n\n\n"
         return subject, message
 
-    def send_email(self, subject, message, to_recipients, cc_recipients):
+    def send_email(self, subject, message, filename, to_recipients, cc_recipients):
         """
         Send an email
 
         :param subject: Email subject
         :param message: Email message
+        :param filename: File to attach
         :param to_recipients: Email to recipients
         :param cc_recipients: Email cc recipients
         :return:
         """
         print(f"[Email]: Enter Send Email {subject}")
         draft = self.nylas_obj.drafts.create()
+
         draft.subject = subject
         draft.body = message
         draft.to = list(map(lambda a: {'email': a}, to_recipients))
         draft.cc = list(map(lambda a: {'email': a}, cc_recipients))
+        draft.attach(self.attach_file(filename))
         print(f"[Email]: Ready to Send Email {subject}")
         draft.send()
+
+    def attach_file(self, filename):
+        """
+        open and attach a file
+
+        :param filename:
+        :return:
+        """
+        attachment = open(filename, 'rb')
+        file = self.nylas_obj.files.create()
+        file.filename = filename
+        file.stream = attachment
+        file.save()
+        attachment.close()
+        return file
