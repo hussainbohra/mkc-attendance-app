@@ -1,5 +1,5 @@
 .idea/
-resources/
+resources/*.json
 attendance/build/
 attendance/dist/
 attendance/src/mkc_attendance_app.egg-info/
