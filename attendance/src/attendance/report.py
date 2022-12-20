@@ -1,6 +1,10 @@
+from dataclasses import asdict
+
 from .config import Config
 from .sheets import GSheets
 from .email import Email
+from .models import Attendance, Total
+from .students import StudentDB
 from .utils import get_prev_saturdays
 from .writer import Writer
 
@@ -28,6 +32,8 @@ class Report:
 
         )
         self.writer = Writer(self.config)
+        self.all_student_data = StudentDB(self.config, self.gsheet_obj).build_school_db()
+        self.advance_leave_requests = self.get_advance_leave_requests()
 
     def generate_report(self):
         """
@@ -44,7 +50,6 @@ class Report:
         """
         attendance_sheet = self.config['attendance_sheet_id']
         all_classes = self.gsheet_obj.get_sheets(attendance_sheet)
-        advance_leave_requests = self.get_advance_leave_requests()
         latest_attendance = []
         for tab in all_classes:
             if tab.lower() == "total":
@@ -57,16 +62,16 @@ class Report:
             attendance_df["date"] = pd.to_datetime(
                 attendance_df['Timestamp']
             )
+            print("get latest attendance for a class {0}".format(tab))
             last_attendance = attendance_df.sort_values(
                 by='date', ascending=False
             ).reset_index().loc[0].to_dict()
             latest_attendance.append({
                 'class_name': tab,
-                'last_attendance': last_attendance
+                'latest_attendance': last_attendance
             })
-        all_student_data = self.build_school_db()
 
-        absentees, total = self.get_absentees(latest_attendance, all_student_data, advance_leave_requests)
+        absentees, total = self.get_absentees(latest_attendance)
         xlsx_file = self.writer.generate_csv_report(absentees, total)
         subject, message = self.email_obj.prepare_email(
             absentees,
@@ -79,65 +84,12 @@ class Report:
             self.config['email']['cc_emails']
         )
 
-    def build_school_db(self):
-        """
-        Build a student data in the following format:
-            {
-                "class_name":{
-                    "students" : [
-                            {Ejamaat:1111111, 'full_name':xxxxx},
-                            {Ejamaat:2222222, 'full_name':yyyyy}
-                        ]
-                    "teacher" : {Ejamaat:3333333, 'full_name':zzzzzzz}
-                    "sub_teacher" : {Ejamaat:4444444, 'full_name':zzzzzzz}
-                }
-            }
-        :param master_sheet_values:
-        :param teachers:
-        :return:
-        """
-        master_sheet = self.config['master_student_sheet_id']
-        master_student_values = self.gsheet_obj.read_gsheet(
-            master_sheet,
-            self.config['master_student_sheet_tab'],
-        )
-        teachers = self.gsheet_obj.read_gsheet(
-            master_sheet,
-            self.config['master_teacher_sheet_tab'],
-        )
-        all_student_data = []
-        for val in master_student_values:
-            try:
-                student_data = {
-                    "full_name": val['Full Name'],
-                    "home_phone": val['HOME PHONE'],
-                    "father_cell": val['FATHER CELL'],
-                    "father_name": val['FATHER'],
-                    "mother_cell": val['MOTHER CELL'],
-                    "mother_name": val['MOTHER'],
-                    "primary_email": val['Primary Email'],
-                    "class_name": val['Class']
-                }
-            except KeyError:
-                continue
-            teacher = list(filter(lambda a: a['Class'] == val['Class'], teachers))
-            if teacher:
-                student_data.update({
-                    "teacher_Ejamaat": teacher[0]['Ejamaat'],
-                    "teacher_full_name": teacher[0]['Full Name']
-                })
-            all_student_data.append(student_data)
-
-        return all_student_data
-
-    def get_absentees(self, latest_attendance, all_student_data, advance_leave_requests={}):
+    def get_absentees(self, latest_attendance):
         """
         Identifying all Absentees and generate there information
         In addition, also creating a consolidated report
 
         :param class_name:
-        :param all_students:
-        :param present_student:
         :return:
         """
         print("[Get Absentees]: Identifying all Absentees")
@@ -147,16 +99,20 @@ class Report:
         for attendance in latest_attendance:
             absent_count, present_count, informed_absent_count = 0, 0, 0
             class_name = attendance.get("class_name")
-            timestamp = attendance.get("last_attendance", {}).get("Timestamp")
-            date = attendance.get("last_attendance", {}).get("Date:")
+            timestamp = attendance.get("latest_attendance", {}).get("Timestamp")
+            date = attendance.get("latest_attendance", {}).get("Date:")
             if timestamp:
-                for k, v in attendance.get("last_attendance", {}).items():
+                for k, v in attendance.get("latest_attendance", {}).items():
                     if k.strip().startswith('[') and k.strip().endswith(']'):
                         if str(v).lower() != "present":
                             student_name = k.strip().replace('[', '').replace(']', '')
+                            student_info = list(
+                                filter(lambda a: a.full_name.lower() == student_name.lower(), self.all_student_data)
+                            )
+                            # checking if student has applied leave in advance
                             leave_applied = list(filter(
                                 lambda a: a['Class'] == class_name and a['student_name'] == student_name,
-                                advance_leave_requests
+                                self.advance_leave_requests
                             ))
                             if leave_applied:
                                 v = "Informed Absent (By Form)"
@@ -164,35 +120,37 @@ class Report:
                                 absent_count += 1
                             else:
                                 informed_absent_count += 1
-                            student_info = list(
-                                filter(lambda a: a['full_name'].lower() == student_name.lower(), all_student_data))
-                            absentee = {
-                                "date": date,
-                                "student_name": student_name,
-                                "class_name": class_name,
-                                "status": v,
-                                "mother_info": "",
-                                "father_info": "",
-                                "primary_email": ""
-                            }
-                            if student_info:
-                                absentee.update({
-                                    "mother_info": f"{student_info[0].get('mother_name')} - {student_info[0].get('mother_cell')}",
-                                    "father_info": f"{student_info[0].get('father_name')} - {student_info[0].get('father_cell')}",
-                                    "primary_email": student_info[0].get('primary_email')
-                                })
-                            absentees.append(absentee)
+                            absentees.append(self.create_absentee_row(
+                                date, student_name, class_name, v, student_info
+                            ))
                         else:
                             present_count += 1
-            total.append({
-                "date": date,
-                "class_name": class_name,
-                "present_count": present_count,
-                "absent_count": absent_count,
-                "informed_absent_count": informed_absent_count
-            })
+                    else:
+                        # ignore all keys which doesnt start with "[" and ends with "]"
+                        continue
+            total.append(
+                asdict(Total(date, class_name, present_count, informed_absent_count, absent_count))
+            )
         print("[Get Absentees]: Exiting")
         return absentees, total
+
+    def create_absentee_row(self, date, student_name, class_name, status, student_info={}):
+        """
+        Prepare a row for absent students.
+
+        :param date:
+        :param student_name:
+        :param class_name:
+        :param status:
+        :param student_info:
+        :return:
+        """
+        absentee = Attendance(date, student_name, class_name, status)
+        if student_info:
+            absentee.mother_info =f"{student_info[0].mother_name} - {student_info[0].mother_cell}"
+            absentee.father_info = f"{student_info[0].father_name} - {student_info[0].father_cell}"
+            absentee.primary_email = student_info[0].primary_email
+        return asdict(absentee)
 
     def get_advance_leave_requests(self):
         """
@@ -202,7 +160,7 @@ class Report:
         :return:
         """
         prev_saturdays = get_prev_saturdays()
-        print("fetching students who applied for leave in advance from {0} to {1}".format(
+        print("[Read Advance Leave Requests] Reading students applied for advance leave from {0} to {1}".format(
             prev_saturdays[0], prev_saturdays[1])
         )
         student_absence_request = self.config['student_absence_request']

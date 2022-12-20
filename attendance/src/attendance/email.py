@@ -26,24 +26,14 @@ class Email:
         absentees_data = ""
         for absent in absentees:
             absentees_data += config["student_row"].format(
-                absent["date"],
-                absent["student_name"],
-                absent["class_name"],
-                absent["status"],
-                absent["mother_info"],
-                absent["father_info"],
-                absent["primary_email"],
+                *absent.values(),
                 "#FA5F55" if str(absent["status"]).lower() == "absent" else "#FFFF00",
             ) + "\n"
         total_data = ""
         total_present, total_informed_absent, total_uninformed_absent = 0, 0, 0
         for t in total:
             total_data += config["total_row"].format(
-                t["date"],
-                t["class_name"],
-                t["present_count"],
-                t["informed_absent_count"],
-                t["absent_count"]
+                *t.values()
             ) + "\n"
             total_present += t["present_count"]
             total_informed_absent += t["informed_absent_count"]
