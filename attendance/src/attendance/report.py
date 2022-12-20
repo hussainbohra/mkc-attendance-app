@@ -1,10 +1,11 @@
 from .config import Config
 from .sheets import GSheets
 from .email import Email
+from .utils import get_prev_saturdays
+from .writer import Writer
 
-from datetime import datetime
 import pandas as pd
-import xlsxwriter
+import numpy as np
 
 
 class Report:
@@ -26,11 +27,24 @@ class Report:
             self.config['email']['access_token']
 
         )
+        self.writer = Writer(self.config)
 
     def generate_report(self):
+        """
+        Read attendance sheet, and grab all sheet names (classes)
+        Read advance leave request form, and grab leave request in last 7 days.
+        Iterate on all classes
+            - Grab the latest attendance data
+            - Prepare a dict for every class and its latest attendance
+        Get all absentees
+        Prepare CSV file for all absentees (informed and uninformed)
+        Prepare and Send an email
+
+        :return:
+        """
         attendance_sheet = self.config['attendance_sheet_id']
         all_classes = self.gsheet_obj.get_sheets(attendance_sheet)
-
+        advance_leave_requests = self.get_advance_leave_requests()
         latest_attendance = []
         for tab in all_classes:
             if tab.lower() == "total":
@@ -52,8 +66,8 @@ class Report:
             })
         all_student_data = self.build_school_db()
 
-        absentees, total = self.get_absentees(latest_attendance, all_student_data)
-        xlsx_file = self.generate_csv_report(absentees, total)
+        absentees, total = self.get_absentees(latest_attendance, all_student_data, advance_leave_requests)
+        xlsx_file = self.writer.generate_csv_report(absentees, total)
         subject, message = self.email_obj.prepare_email(
             absentees,
             total,
@@ -116,7 +130,7 @@ class Report:
 
         return all_student_data
 
-    def get_absentees(self, latest_attendance, all_student_data):
+    def get_absentees(self, latest_attendance, all_student_data, advance_leave_requests={}):
         """
         Identifying all Absentees and generate there information
         In addition, also creating a consolidated report
@@ -131,7 +145,7 @@ class Report:
         total = []
         print("Iterating over the latest attendance, to identify absentees")
         for attendance in latest_attendance:
-            absent_count, present_count = 0, 0
+            absent_count, present_count, informed_absent_count = 0, 0, 0
             class_name = attendance.get("class_name")
             timestamp = attendance.get("last_attendance", {}).get("Timestamp")
             date = attendance.get("last_attendance", {}).get("Date:")
@@ -139,8 +153,17 @@ class Report:
                 for k, v in attendance.get("last_attendance", {}).items():
                     if k.strip().startswith('[') and k.strip().endswith(']'):
                         if str(v).lower() != "present":
-                            absent_count += 1
                             student_name = k.strip().replace('[', '').replace(']', '')
+                            leave_applied = list(filter(
+                                lambda a: a['Class'] == class_name and a['student_name'] == student_name,
+                                advance_leave_requests
+                            ))
+                            if leave_applied:
+                                v = "Informed Absent (By Form)"
+                            if v.lower() == "absent":
+                                absent_count += 1
+                            else:
+                                informed_absent_count += 1
                             student_info = list(
                                 filter(lambda a: a['full_name'].lower() == student_name.lower(), all_student_data))
                             absentee = {
@@ -165,47 +188,44 @@ class Report:
                 "date": date,
                 "class_name": class_name,
                 "present_count": present_count,
-                "absent_count": absent_count
+                "absent_count": absent_count,
+                "informed_absent_count": informed_absent_count
             })
         print("[Get Absentees]: Exiting")
         return absentees, total
 
-    def generate_csv_report(self, absentees, total):
+    def get_advance_leave_requests(self):
         """
-        Write an excel file
-            Tab1: All students absent on a given day
-            Tab2: Consolidated report
-        :param absentees:
-        :param total:
+        Read student leave request form and
+        identify students who requested leave in advance
+
         :return:
         """
-        filename = "mkc-attendance-{0}.xlsx".format(datetime.now().strftime('%Y-%m-%d'))
-        workbook = xlsxwriter.Workbook(filename)
-        a_worksheet = workbook.add_worksheet("absentees")
-        row = 0
-        for absent in absentees:
-            col_num = 0
-            for key, val in absent.items():
-                a_worksheet.set_column(row, col_num, 20)
-                if row == 0:
-                    a_worksheet.write(row, col_num, key)
-                else:
-                    a_worksheet.write(row, col_num, val)
-                col_num += 1
-            row += 1
-
-        row = 0
-        t_worksheet = workbook.add_worksheet("total")
-        for t in total:
-            col_num = 0
-            for key, val in t.items():
-                t_worksheet.set_column(row, col_num, 20)
-                if row == 0:
-                    t_worksheet.write(row, col_num, key)
-                else:
-                    t_worksheet.write(row, col_num, val)
-                col_num += 1
-            row += 1
-
-        workbook.close()
-        return filename
+        prev_saturdays = get_prev_saturdays()
+        print("fetching students who applied for leave in advance from {0} to {1}".format(
+            prev_saturdays[0], prev_saturdays[1])
+        )
+        student_absence_request = self.config['student_absence_request']
+        absence_request = self.gsheet_obj.read_gsheet(
+            student_absence_request,
+            tab_name=self.config['student_absence_request_tab'],
+            repeated_header="Student Name"
+        )
+        absence_request_df = pd.DataFrame(absence_request)
+        absence_request_df['date'] = pd.to_datetime(
+            absence_request_df['Timestamp'], format='%m/%d/%Y %H:%M:%S'
+        )
+        filtered_df = absence_request_df.loc[
+            (absence_request_df['date'] >= prev_saturdays[0].strftime('%Y-%m-%d'))
+            & (absence_request_df['date'] < prev_saturdays[1].strftime('%Y-%m-%d'))
+            ]
+        student_cols = list(map(lambda a: "Student Name.%s" % str(a), range(0, 22)))
+        filtered_df = filtered_df.replace(r'^\s*$', np.nan, regex=True)
+        filtered_df['student_name'] = (
+            filtered_df[student_cols]
+            .bfill(axis=1).iloc[:, 0]
+        )
+        filtered_df = filtered_df.drop(columns=student_cols)
+        filtered_df = filtered_df.loc[filtered_df['Request Type'] == 'Leave']
+        filtered_df = filtered_df[['student_name', 'Class']]
+        return filtered_df.to_dict("records")

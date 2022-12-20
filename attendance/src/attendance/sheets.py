@@ -49,11 +49,20 @@ class GSheets:
         except HttpError as err:
             print(err)
 
-    def read_gsheet(self, sheet_id, tab_name):
+    def read_gsheet(
+        self,
+        sheet_id,
+        tab_name,
+        repeated_header="",
+    ):
         """
+        Read the specific tab from the google sheet
+        read the first rows as header and map the remaining rows to the same
 
-        :param sheet_id:
-        :param tab_name:
+        :param sheet_id: gsheet id
+        :param tab_name: gsheet tab name
+        :param repeated_header: default 0
+            if the same header is repeated add a counter to it
         :return:
         """
         data = []
@@ -67,8 +76,19 @@ class GSheets:
             )
             response = request.execute()
             headers = response['values'][0]
+            if repeated_header:
+                counter = 0
+                updated_headers = []
+                for h in headers:
+                    if h == repeated_header:
+                        updated_headers.append(h + "." + str(counter))
+                        counter += 1
+                    else:
+                        updated_headers.append(h)
+                headers = updated_headers
             for val in response['values'][1:]:
                 data.append(dict(zip(headers, val)))
             return data
         except HttpError as err:
             print(err)
+            return []

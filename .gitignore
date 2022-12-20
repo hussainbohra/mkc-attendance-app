@@ -9,3 +9,6 @@ attendance/src/attendance/__pycache__/
 bin/config.ini
 *.xlsx
 *.json
+.DS_Store
+*.key
+*.pub

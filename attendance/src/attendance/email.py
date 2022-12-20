@@ -36,13 +36,25 @@ class Email:
                 "#FA5F55" if str(absent["status"]).lower() == "absent" else "#FFFF00",
             ) + "\n"
         total_data = ""
+        total_present, total_informed_absent, total_uninformed_absent = 0, 0, 0
         for t in total:
             total_data += config["total_row"].format(
                 t["date"],
                 t["class_name"],
                 t["present_count"],
+                t["informed_absent_count"],
                 t["absent_count"]
             ) + "\n"
+            total_present += t["present_count"]
+            total_informed_absent += t["informed_absent_count"]
+            total_uninformed_absent += t["absent_count"]
+        total_data += config["total_row"].format(
+            t["date"],
+            "Total",
+            total_present,
+            total_informed_absent,
+            total_uninformed_absent
+        ) + "\n"
         subject = config["subject"].format(datetime.now().strftime('%Y-%m-%d'))
         message = config["message"].format(
             datetime.now().strftime('%Y-%m-%d'),

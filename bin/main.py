@@ -7,7 +7,7 @@ if __name__ == '__main__':
     variables = argparse.ArgumentParser()
     variables.add_argument(
         "--config", "-c",
-        help="Config file for mkc attendane",
+        help="Config file for mkc attendance",
         required=True,
         default=None
     )
