@@ -30,6 +30,10 @@ class Attendance:
 class Total:
     date: str
     class_name: str
-    present_count: str
-    informed_absent_count: str
-    absent_count: str
+    present_count: int
+    informed_absent_count: int
+    absent_count: int
+    total: int = 0
+
+    def __post_init__(self):
+        self.total = self.present_count + self.informed_absent_count + self.absent_count

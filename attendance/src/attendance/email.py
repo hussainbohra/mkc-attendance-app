@@ -40,10 +40,11 @@ class Email:
             total_uninformed_absent += t["absent_count"]
         total_data += config["total_row"].format(
             t["date"],
-            "Total",
+            "Grand Total",
             total_present,
             total_informed_absent,
-            total_uninformed_absent
+            total_uninformed_absent,
+            total_present + total_informed_absent + total_uninformed_absent
         ) + "\n"
         subject = config["subject"].format(datetime.now().strftime('%Y-%m-%d'))
         message = config["message"].format(
