@@ -5,7 +5,7 @@ class StudentDB:
     def __init__(self, config, gsheet_obj):
         self.master_sheet = config['master_student_sheet_id']
         self.master_sheet_tab = config['master_student_sheet_tab']
-
+        self.master_teacher_sheet_tab = config['master_teacher_sheet_tab']
         self.gsheet_obj = gsheet_obj
 
     def build_school_db(self):
@@ -33,7 +33,7 @@ class StudentDB:
         )
         teachers = self.gsheet_obj.read_gsheet(
             self.master_sheet,
-            self.master_sheet_tab,
+            self.master_teacher_sheet_tab,
         )
         for val in master_student_values:
             try:
