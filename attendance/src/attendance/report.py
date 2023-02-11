@@ -104,7 +104,7 @@ class Report:
             if timestamp:
                 for k, v in attendance.get("latest_attendance", {}).items():
                     if k.strip().startswith('[') and k.strip().endswith(']'):
-                        if str(v).lower() != "present":
+                        if type(v) is str and str(v).lower() != "present":
                             student_name = k.strip().replace('[', '').replace(']', '')
                             student_info = list(
                                 filter(lambda a: a.full_name.lower() == student_name.lower(), self.all_student_data)
