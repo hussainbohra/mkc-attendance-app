@@ -55,13 +55,13 @@ class Email:
         message += "\n\n\n"
         return subject, message
 
-    def send_email(self, subject, message, filename, to_recipients, cc_recipients):
+    def send_email(self, subject, message, files, to_recipients, cc_recipients):
         """
         Send an email
 
         :param subject: Email subject
         :param message: Email message
-        :param filename: File to attach
+        :param files: Files to attach
         :param to_recipients: Email to recipients
         :param cc_recipients: Email cc recipients
         :return:
@@ -73,7 +73,8 @@ class Email:
         draft.body = message
         draft.to = list(map(lambda a: {'email': a}, to_recipients))
         draft.cc = list(map(lambda a: {'email': a}, cc_recipients))
-        draft.attach(self.attach_file(filename))
+        for filename in files:
+            draft.attach(self.attach_file(filename))
         print(f"[Email]: Ready to Send Email {subject}")
         draft.send()
 

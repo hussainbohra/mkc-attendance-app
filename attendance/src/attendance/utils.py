@@ -19,3 +19,15 @@ def get_prev_saturdays():
             today - timedelta(7 + idx + 1),
             today - timedelta(7 + idx - 6)
         )
+
+
+def is_absent(row):
+    """
+    If value is empty and absent, then returns 1
+    :param row:
+    :return:
+    """
+    if type(row['Value']) == str and row['Value'].lower() == 'absent':
+        return 1
+    else:
+        return 0
