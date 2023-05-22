@@ -232,7 +232,7 @@ class Report:
         )
         df = df[df['row_num'] == 1]
         df = df.drop(
-            ['Timestamp', 'Total', 'date', 'row_num'],
+            ['Timestamp', 'date', 'row_num'],
             axis=1
         )
         # Unpivot
